@@ -44,15 +44,20 @@ func getWordsHandler(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
-        // Получаем теги для каждого слова
-        tagRows, _ := db.Query("SELECT t.name FROM tags t JOIN word_tags wt ON t.id = wt.tag_id WHERE wt.word_id = ?", w.ID)
+        // Теперь ПРОВЕРЯЕМ ошибку, а не игнорируем ее (_)
+        tagRows, err := db.Query("SELECT t.name FROM tags t JOIN word_tags wt ON t.id = wt.tag_id WHERE wt.word_id = ?", w.ID)
         var tags []string
-        for tagRows.Next() {
-            var tagName string
-            tagRows.Scan(&tagName)
-            tags = append(tags, tagName)
+        
+        if err == nil { // Разбираем теги, только если запрос прошел успешно
+            for tagRows.Next() {
+                var tagName string
+                tagRows.Scan(&tagName)
+                tags = append(tags, tagName)
+            }
+            tagRows.Close()
+        } else {
+            log.Println("Ошибка получения тегов для слова", w.Word, ":", err)
         }
-        tagRows.Close()
 
         if tags == nil {
             tags = []string{}
