@@ -1,6 +1,8 @@
+import os
 import requests
 
-API_URL = "http://localhost:8080"
+# Теперь берем адрес API из переменных (а если его нет, по умолчанию `http://localhost:8080`)
+API_URL = os.getenv("API_URL", "http://localhost:8080")
 
 def init_db():
     # База уже инициализирована, создание таблиц можно перенести в Go позже.
