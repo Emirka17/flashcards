@@ -2,4 +2,7 @@ module flashcards-backend
 
 go 1.26.5
 
-require github.com/mattn/go-sqlite3 v1.14.48 // indirect
+require (
+	github.com/lib/pq v1.12.3 // indirect
+	github.com/mattn/go-sqlite3 v1.14.48 // indirect
+)

@@ -6,8 +6,9 @@ import (
     "fmt"
     "log"
     "net/http"
+    "os"
 
-    _ "github.com/mattn/go-sqlite3"
+    _ "github.com/lib/pq" // Драйвер для PostgreSQL
 )
 
 type Word struct {
@@ -16,21 +17,33 @@ type Word struct {
     Translation string   `json:"translation"`
     Example     string   `json:"example"`
     CreatedAt   string   `json:"created_at,omitempty"`
-    Tags        []string `json:"tags"` // Добавили массив тегов
+    Tags        []string `json:"tags"`
 }
 
 var db *sql.DB
 
 func initDB() {
+    // Берем строку подключения из переменной окружения (чтобы не хранить пароль в коде)
+    connStr := os.Getenv("DATABASE_URL")
+    if connStr == "" {
+        log.Fatal("Переменная окружения DATABASE_URL не задана")
+    }
+
     var err error
-    db, err = sql.Open("sqlite3", "../data/cards.db")
+    db, err = sql.Open("postgres", connStr)
     if err != nil {
         log.Fatal(err)
+    }
+    
+    // Проверяем, что база реально доступна
+    if err = db.Ping(); err != nil {
+        log.Fatal("Не удалось подключиться к БД: ", err)
     }
 }
 
 func getWordsHandler(w http.ResponseWriter, r *http.Request) {
-    rows, err := db.Query("SELECT id, word, translation, IFNULL(example, ''), created_at FROM words ORDER BY id DESC")
+    // Заменили IFNULL на COALESCE (стандарт Postgres)
+    rows, err := db.Query("SELECT id, word, translation, COALESCE(example, ''), created_at FROM words ORDER BY id DESC")
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
@@ -44,11 +57,11 @@ func getWordsHandler(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
-        // Теперь ПРОВЕРЯЕМ ошибку, а не игнорируем ее (_)
-        tagRows, err := db.Query("SELECT t.name FROM tags t JOIN word_tags wt ON t.id = wt.tag_id WHERE wt.word_id = ?", w.ID)
+        // В Postgres вместо ? пишем $1
+        tagRows, err := db.Query("SELECT t.name FROM tags t JOIN word_tags wt ON t.id = wt.tag_id WHERE wt.word_id = $1", w.ID)
         var tags []string
         
-        if err == nil { // Разбираем теги, только если запрос прошел успешно
+        if err == nil {
             for tagRows.Next() {
                 var tagName string
                 tagRows.Scan(&tagName)
@@ -56,7 +69,7 @@ func getWordsHandler(w http.ResponseWriter, r *http.Request) {
             }
             tagRows.Close()
         } else {
-            log.Println("Ошибка получения тегов для слова", w.Word, ":", err)
+            log.Println("Ошибка получения тегов:", err)
         }
 
         if tags == nil {
@@ -78,36 +91,26 @@ func addWordHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    stmt, err := db.Prepare("INSERT INTO words (word, translation, example) VALUES (?, ?, ?)")
+    // В Postgres мы получаем ID через RETURNING id
+    err := db.QueryRow("INSERT INTO words (word, translation, example) VALUES ($1, $2, $3) RETURNING id",
+        newWord.Word, newWord.Translation, newWord.Example).Scan(&newWord.ID)
+    
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
-    defer stmt.Close()
 
-    res, err := stmt.Exec(newWord.Word, newWord.Translation, newWord.Example)
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
-
-    id, _ := res.LastInsertId()
-    newWord.ID = int(id)
-
-    // Сохраняем теги
     for _, tag := range newWord.Tags {
         if tag == "" {
             continue
         }
-        // Добавляем тег, если его нет
-        db.Exec("INSERT OR IGNORE INTO tags (name) VALUES (?)", tag)
+        // Заменили INSERT OR IGNORE на стандарт Postgres
+        db.Exec("INSERT INTO tags (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", tag)
         
-        // Получаем ID тега
         var tagID int
-        db.QueryRow("SELECT id FROM tags WHERE name = ?", tag).Scan(&tagID)
+        db.QueryRow("SELECT id FROM tags WHERE name = $1", tag).Scan(&tagID)
         
-        // Связываем слово и тег
-        db.Exec("INSERT OR IGNORE INTO word_tags (word_id, tag_id) VALUES (?, ?)", newWord.ID, tagID)
+        db.Exec("INSERT INTO word_tags (word_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", newWord.ID, tagID)
     }
 
     w.Header().Set("Content-Type", "application/json")
@@ -131,6 +134,6 @@ func main() {
 
     http.HandleFunc("/words", wordsHandler)
 
-    fmt.Println("API работает на порту 8080...")
+    fmt.Println("API работает на порту 8080 (Подключено к PostgreSQL)...")
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
