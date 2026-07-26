@@ -221,3 +221,5 @@ data/
 
 
 .tld
+
+node_modules
