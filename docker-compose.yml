@@ -1,24 +1,12 @@
-version: '3.8'
-
 services:
-  # Наш Go-сервер
+  # Наш единственный локальный сервис: Бэкенд на Go
   api:
     build: 
       context: ./backend
+      dockerfile: Dockerfile
+    container_name: flashcards_go_api
     ports:
       - "8080:8080"
-    environment:
-      # Передаем ссылку на БД прямо из системы в контейнер
-      - DATABASE_URL=${DATABASE_URL}
-    
-  # Наш Streamlit фронтенд
-  frontend:
-    build:
-      context: .
-    ports:
-      - "8501:8501"
-    environment:
-      # Фронтенд должен знать, где искать API (имя контейнера 'api' из блока выше)
-      - API_URL=http://host.docker.internal:8080
-    depends_on:
-      - api
+    env_file:
+      - ./backend/.env   # <- ВСЕ пароли и ссылки лежат ТОЛЬКО там
+    restart: unless-stopped

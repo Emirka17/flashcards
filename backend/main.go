@@ -119,6 +119,16 @@ func addWordHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func wordsHandler(w http.ResponseWriter, r *http.Request) {
+    // Включаем CORS (разрешаем React забирать данные)
+    w.Header().Set("Access-Control-Allow-Origin", "*")
+    w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+    if r.Method == http.MethodOptions {
+        w.WriteHeader(http.StatusOK)
+        return
+    }
+
     if r.Method == http.MethodGet {
         getWordsHandler(w, r)
     } else if r.Method == http.MethodPost {

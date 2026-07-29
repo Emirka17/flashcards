@@ -4,7 +4,7 @@ import { DECKS } from '../data'
 import { BackIcon } from '../components/icons'
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
-function StatsScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
+export function StatsScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
   const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
   const activity = [4, 8, 6, 12, 5, 9, 7]
   const max = Math.max(...activity)
